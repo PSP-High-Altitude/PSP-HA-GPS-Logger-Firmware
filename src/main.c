@@ -74,7 +74,7 @@ uint64_t buffer_write_us(FIL* fp, uint32_t* buf, uint32_t len) {
     uint64_t start_us = time_us_64();
 
     // We assume the file is already open
-    uint32_t bw;
+    uint bw;
     FRESULT fr = f_write(fp, buf, len/sizeof(uint32_t), &bw);
     if (fr != FR_OK) {
         panic("f_write error: %s (%d\n)", FRESULT_str(fr), fr);
@@ -153,7 +153,7 @@ int main() {
     printf("Goodbye, world!\n");
 
     // Create buffer to dump data from
-    #define BUF_SIZE 128
+    const uint BUF_SIZE = 128;
     uint32_t buf[BUF_SIZE];
     for (int i = 0; i < BUF_SIZE; i++) {
         buf[i] = i;
@@ -169,9 +169,9 @@ int main() {
     while (true) {
         calc_write_speed(buf, BUF_SIZE, 10);
         printf("\nSleeping for 5 seconds... ");
-        for (int i = 4; i > 0; i--) {
-            sleep_ms(1000);
+        for (int i = 5; i > 0; i--) {
             printf("%d... ", i);
+            sleep_ms(1000);
         }
         printf("\n\n");
     }

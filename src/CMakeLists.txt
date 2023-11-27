@@ -20,10 +20,10 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/src)
 # add a custom command to copy the executable to the Pi's drive
 add_custom_command(
     TARGET main POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-            ${EXECUTABLE_OUTPUT_PATH}/main.uf2
-            D:
-    COMMENT "Copying main.uf2 to drive D:"
+    COMMAND ${CMAKE_COMMAND}
+    -DBIN_PATH=${EXECUTABLE_OUTPUT_PATH}/main.uf2
+    -P ${CMAKE_SOURCE_DIR}/copy_uf2_to_pico.cmake
+    COMMENT "Copying generated main.uf2 to Pico"
 )
 
 # Create a custom target that depends on the custom command
