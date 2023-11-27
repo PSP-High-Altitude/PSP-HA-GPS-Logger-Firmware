@@ -13,6 +13,8 @@ specific language governing permissions and limitations under the License.
 */
 
 #include <stdio.h>
+#include <stdint.h>
+#include <time.h>
 //
 #include "pico/stdlib.h"
 //
@@ -68,6 +70,60 @@ sd_card_t *sd_get_by_num(size_t num) {
         return NULL;
 }
 
+uint64_t buffer_write_us(FIL* fp, uint32_t* buf, uint32_t len) {
+    uint64_t start_us = time_us_64();
+
+    // We assume the file is already open
+    uint32_t bw;
+    FRESULT fr = f_write(fp, buf, len/sizeof(uint32_t), &bw);
+    if (fr != FR_OK) {
+        panic("f_write error: %s (%d\n)", FRESULT_str(fr), fr);
+    }
+
+    uint64_t stop_us = time_us_64();
+
+    return stop_us - start_us;
+}
+
+void calc_write_speed(uint32_t* buf, uint32_t len, uint32_t total_mb) {
+    FRESULT fr;
+    FIL fil;
+
+    printf("Starting write of %u MB with %u B chunks\n",
+           total_mb, len * sizeof(uint32_t));
+
+    gpio_put(PICO_DEFAULT_LED_PIN, 0);
+
+    const char* const filename = "dump.b";
+    fr = f_open(&fil, filename, FA_WRITE);
+    if (FR_OK != fr && FR_EXIST != fr)
+        panic("f_open(%s) error: %s (%d)\n", filename, FRESULT_str(fr), fr);
+
+    uint32_t start_us = time_us_64();
+
+    int passes = (total_mb * 1000 * 1000) / (len * sizeof(uint32_t));
+    uint32_t total_driver_us = 0;
+    for (int i = 0; i < passes; i++) {
+        total_driver_us += buffer_write_us(&fil, buf, len);
+    }
+    uint32_t total_written_bytes = len * sizeof(uint32_t)* passes;
+
+    uint32_t total_elapsed_us = time_us_64() - start_us;
+
+    fr = f_close(&fil);
+    if (FR_OK != fr) {
+        printf("f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+    }
+    
+    gpio_put(PICO_DEFAULT_LED_PIN, 1);
+    printf("Wrote %u B in %u us (%u kB/s)\n",
+           total_written_bytes, total_elapsed_us,
+           total_written_bytes/(total_elapsed_us/1000));
+
+    printf("%.2f%% of time spent in driver code\n",
+           ((float)total_driver_us*100)/((float)total_elapsed_us));
+}
+
 int main() {
     stdio_init_all();
 
@@ -91,21 +147,32 @@ int main() {
     }
     fr = f_close(&fil);
     if (FR_OK != fr) {
-        printf("f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+        panic("f_close error: %s (%d)\n", FRESULT_str(fr), fr);
     }
-    f_unmount(pSD->pcName);
 
     printf("Goodbye, world!\n");
+
+    // Create buffer to dump data from
+    #define BUF_SIZE 128
+    uint32_t buf[BUF_SIZE];
+    for (int i = 0; i < BUF_SIZE; i++) {
+        buf[i] = i;
+    }
     
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_put(LED_PIN, 1);
+
+    printf("Entering test loop\n");
+
     while (true) {
-        gpio_put(LED_PIN, 1);
-        printf("tick ");
-        sleep_ms(500);
-        gpio_put(LED_PIN, 0);
-        printf("tock\n");
-        sleep_ms(500);
+        calc_write_speed(buf, BUF_SIZE, 10);
+        printf("\nSleeping for 5 seconds... ");
+        for (int i = 4; i > 0; i--) {
+            sleep_ms(1000);
+            printf("%d... ", i);
+        }
+        printf("\n\n");
     }
 }
